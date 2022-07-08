@@ -16,7 +16,14 @@ from functools import lru_cache
 from inspect import stack
 
 from conda import __version__ as _conda_version
-from conda.base.constants import REPODATA_FN, ChannelPriority, DepsModifier, UpdateModifier, on_win
+from conda.base.constants import (
+    REPODATA_FN,
+    ChannelPriority,
+    DepsModifier,
+    UpdateModifier,
+    on_win,
+    UNKNOWN_CHANNEL,
+)
 from conda.base.context import context
 from conda.common.constants import NULL
 from conda.common.io import Spinner
@@ -36,6 +43,8 @@ from conda.exceptions import (
 from conda.models.channel import Channel
 from conda.models.match_spec import MatchSpec
 from conda.models.records import PackageRecord
+from conda.models.version import VersionOrder
+from conda.core.prefix_data import PrefixData
 from conda.core.solve import Solver
 import libmambapy as api
 
@@ -155,14 +164,17 @@ class LibMambaIndexHelper(IndexHelper):
 
         return tuple(channels)
 
-    def whoneeds(self, query: str):
-        return self._query.whoneeds(query, self._format)
+    def whoneeds(self, query: str, records=True):
+        result_str = self._query.whoneeds(query, self._format)
+        return self._process_query_result(result_str, records=records)
 
-    def depends(self, query: str):
-        return self._query.depends(query, self._format)
+    def depends(self, query: str, records=True):
+        result_str = self._query.depends(query, self._format)
+        return self._process_query_result(result_str, records=records)
 
-    def search(self, query: str):
-        return self._query.find(query, self._format)
+    def search(self, query: str, records=True):
+        result_str = self._query.find(query, self._format)
+        return self._process_query_result(result_str, records=records)
 
     def explicit_pool(self, specs: Iterable[MatchSpec]) -> Iterable[str]:
         """
@@ -170,11 +182,25 @@ class LibMambaIndexHelper(IndexHelper):
         """
         explicit_pool = set()
         for spec in specs:
-            result_str = self.depends(spec.dist_str())
-            result = json_load(result_str)
-            for pkg in result["result"]["pkgs"]:
-                explicit_pool.add(pkg["name"])
+            pkg_records = self.depends(spec.dist_str())
+            for record in pkg_records:
+                explicit_pool.add(record.name)
         return tuple(explicit_pool)
+
+    def _process_query_result(self, result_str, records=True):
+        result = json_load(result_str)
+        if result["result"]["status"] != "OK":
+            query_type = result["query"]["type"]
+            query = result["query"]["query"]
+            error_msg = result["result"]["msg"]
+            raise ValueError(f"{query_type} query '{query}' failed: {error_msg}")
+        if records:
+            pkg_records = []
+            for pkg in result["result"]["pkgs"]:
+                record = PackageRecord(**pkg)
+                pkg_records.append(record)
+            return pkg_records
+        return result
 
 
 class LibMambaSolver(Solver):
@@ -236,6 +262,68 @@ class LibMambaSolver(Solver):
                             spec = MatchSpec(arg)
             fixed_specs.append(spec)
         self.specs_to_add = frozenset(MatchSpec.merge(s for s in fixed_specs))
+
+    def _notify_conda_outdated(
+        self,
+        link_precs,
+        index: LibMambaIndexHelper = None,
+        final_state: Iterable[PackageRecord] = None,
+    ):
+        """
+        We are overriding the base class implementation, which gets called in
+        Solver.solve_for_diff() once 'link_precs' is available. However, we
+        are going to call it before (in .solve_final_state(), right after the solve).
+        That way we can reuse the SolverInputState instance we have lying around,
+        which contains the index information we need, before we lose it.
+        """
+        if index is None and final_state is None:
+            return
+        if not context.notify_outdated_conda or context.quiet:
+            return
+        current_conda_prefix_rec = PrefixData(context.conda_prefix).get("conda", None)
+        if not current_conda_prefix_rec:
+            return
+
+        channel_name = current_conda_prefix_rec.channel.canonical_name
+        if channel_name == UNKNOWN_CHANNEL:
+            channel_name = "defaults"
+        # only look for a newer conda in the channel conda is currently installed from
+        conda_newer_str = f"{channel_name}::conda>4.10"
+        conda_newer_spec = MatchSpec(conda_newer_str)
+
+        # if target prefix is the same conda is running from
+        # maybe the solution we are proposing already contains
+        # an updated conda! in that case, we don't need to check further
+        if paths_equal(self.prefix, context.conda_prefix):
+            if any(conda_newer_spec.match(record) for record in final_state):
+                return
+
+        # check if the index contains records that match a more recent conda version
+        conda_newer_records = index.search(conda_newer_str)
+
+        # print instructions to stderr if we found a newer conda
+        if conda_newer_records:
+            newest = max(conda_newer_records, key=lambda x: VersionOrder(x.version))
+            latest_version = newest.version
+            # If conda comes from defaults, ensure we're giving instructions to users
+            # that should resolve release timing issues between defaults and conda-forge.
+            add_channel = "-c defaults " if channel_name == "defaults" else ""
+            print(
+                dedent(
+                    f"""
+
+                    ==> WARNING: A newer version of conda exists. <==
+                        current version: {_conda_version}
+                        latest version: {latest_version}
+
+                    Please update conda by running
+
+                        $ conda update -n base {add_channel}conda
+
+                    """
+                ),
+                file=sys.stderr,
+            )
 
     @staticmethod
     @lru_cache(maxsize=None)
@@ -316,13 +404,19 @@ class LibMambaSolver(Solver):
             out_state = self._solving_loop(in_state, out_state, index)
 
         # Restore intended verbosity to avoid unwanted
-        # "freeing xxxx..." messages when the libmambpy objects are deleted
+        # "freeing xxxx..." messages when the libmambapy objects are deleted
         api_ctx.verbosity = context.verbosity
         api_ctx.set_verbosity(context.verbosity)
 
         self.neutered_specs = tuple(out_state.neutered.values())
 
-        return out_state.current_solution
+        solution = out_state.current_solution
+
+        # Check whether conda can be updated; this is normally done in .solve_for_diff()
+        # but we are doing it now so we can reuse in_state and friends
+        self._notify_conda_outdated(None, index, solution)
+
+        return solution
 
     def _solving_loop(
         self,
