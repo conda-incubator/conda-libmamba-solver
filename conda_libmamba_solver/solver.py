@@ -27,6 +27,7 @@ from conda.base.constants import (
 from conda.base.context import context
 from conda.common.constants import NULL
 from conda.common.io import Spinner
+from conda.common.path import paths_equal
 from conda.common.serialize import json_dump, json_load
 from conda.common.url import (
     split_anaconda_token,
