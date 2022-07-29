@@ -190,10 +190,10 @@ class LibMambaIndexHelper(IndexHelper):
 
     def _process_query_result(self, result_str, records=True):
         result = json_load(result_str)
-        if result["result"]["status"] != "OK":
-            query_type = result["query"]["type"]
-            query = result["query"]["query"]
-            error_msg = result["result"]["msg"]
+        if result.get("result", {}).get("status") != "OK":
+            query_type = result.get("query", {}).get("type", "<Unknown>")
+            query = result.get("query", {}).get("query", "<Unknown>")
+            error_msg = result.get("result", {}).get("msg", f"Faulty response: {result_str}")
             raise ValueError(f"{query_type} query '{query}' failed: {error_msg}")
         if records:
             pkg_records = []
@@ -274,21 +274,34 @@ class LibMambaSolver(Solver):
         We are overriding the base class implementation, which gets called in
         Solver.solve_for_diff() once 'link_precs' is available. However, we
         are going to call it before (in .solve_final_state(), right after the solve).
-        That way we can reuse the SolverInputState instance we have lying around,
-        which contains the index information we need, before we lose it.
+        That way we can reuse the IndexHelper and SolverOutputState instances we have
+        around, which contains the channel and env information we need, before losing them.
         """
         if index is None and final_state is None:
+            # The parent class 'Solver.solve_for_diff()' method will call this method again
+            # with only 'link_precs' as the argument, because that's the original method signature.
+            # We have added two optional kwargs (index and final_state) so we can call this method
+            # earlier, in .solve_final_state(), while we still have access to the index helper
+            # (which allows us to query the available packages in the channels quickly, without
+            # reloading the channels with conda) and the final_state (which gives the list of
+            # packages to be installed). So, if both index and final_state are None, we return
+            # because that means that the method is being called from .solve_for_diff() and at
+            # that point we will have already called it from .solve_for_state().
             return
         if not context.notify_outdated_conda or context.quiet:
+            # This check can be silenced with a specific option in the context or in quiet mode
             return
         current_conda_prefix_rec = PrefixData(context.conda_prefix).get("conda", None)
         if not current_conda_prefix_rec:
+            # We are checking whether conda can be found in the environment conda is
+            # running from. Unless something is really wrong, this should never happen.
             return
 
         channel_name = current_conda_prefix_rec.channel.canonical_name
         if channel_name == UNKNOWN_CHANNEL:
             channel_name = "defaults"
         # only look for a newer conda in the channel conda is currently installed from
+        # conda_newer_str = f"{channel_name}::conda>{current_conda_prefix_rec.version}"
         conda_newer_str = f"{channel_name}::conda>4.10"
         conda_newer_spec = MatchSpec(conda_newer_str)
 
@@ -305,21 +318,17 @@ class LibMambaSolver(Solver):
         # print instructions to stderr if we found a newer conda
         if conda_newer_records:
             newest = max(conda_newer_records, key=lambda x: VersionOrder(x.version))
-            latest_version = newest.version
-            # If conda comes from defaults, ensure we're giving instructions to users
-            # that should resolve release timing issues between defaults and conda-forge.
-            add_channel = "-c defaults " if channel_name == "defaults" else ""
             print(
                 dedent(
                     f"""
 
                     ==> WARNING: A newer version of conda exists. <==
                         current version: {_conda_version}
-                        latest version: {latest_version}
+                        latest version: {newest.version}
 
                     Please update conda by running
 
-                        $ conda update -n base {add_channel}conda
+                        $ conda update -n base -c {channel_name} conda
 
                     """
                 ),
