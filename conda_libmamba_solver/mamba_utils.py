@@ -18,13 +18,18 @@ except ImportError:
 
 from conda.base.constants import ChannelPriority
 from conda.base.context import context
-from conda.common.serialize import json_dump
 from conda.common.url import join_url
-from conda.core.index import _supplement_index_with_system, check_whitelist
-from conda.core.prefix_data import PrefixData
 from conda.gateways.connection.session import CondaHttpAuth
 from conda.models.channel import Channel as CondaChannel
 from conda.models.records import PackageRecord
+
+try:
+    from conda.core.index import check_allowlist
+except ImportError:  # conda <4.14
+    # TODO: Remove safeguards in a later release
+    # TODO: Patch repodata of older releases to prevent a newer conda
+    #       where check_whitelist won't be available anymore
+    from conda.core.index import check_whitelist as check_allowlist
 
 import libmambapy as api
 
@@ -52,7 +57,7 @@ def get_index(
     all_channels.extend(channel_urls)
     if prepend:
         all_channels.extend(context.channels)
-    check_whitelist(all_channels)
+    check_allowlist(all_channels)
 
     # Remove duplicates but retain order
     all_channels = list(OrderedDict.fromkeys(all_channels))
