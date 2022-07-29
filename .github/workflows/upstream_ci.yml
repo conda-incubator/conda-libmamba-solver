@@ -49,7 +49,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - name: Define test type and override pytest settings
@@ -75,7 +75,7 @@ jobs:
           -e TEST_SPLITS
           -e TEST_GROUP
           -e CONDA_EXPERIMENTAL_SOLVER
-          ghcr.io/conda/conda-ci:master-linux-python${{ matrix.python-version }}
+          ghcr.io/conda/conda-ci:main-linux-python${{ matrix.python-version }}
           bash -c "sudo env CONDA_EXPERIMENTAL_SOLVER=classic \
                         /opt/conda/condabin/conda install -p /opt/conda \
                         --file /opt/conda-libmamba-solver-src/dev/requirements.txt &&
@@ -116,7 +116,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - uses: conda-incubator/setup-miniconda@v2
@@ -210,7 +210,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - name: Set temp dirs correctly

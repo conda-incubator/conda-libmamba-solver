@@ -60,7 +60,7 @@ jobs:
           -e TEST_SPLITS
           -e TEST_GROUP
           -e CONDA_EXPERIMENTAL_SOLVER
-          ghcr.io/conda/conda-ci:master-linux-python${{ matrix.python-version }}
+          ghcr.io/conda/conda-ci:main-linux-python${{ matrix.python-version }}
           bash -c "sudo /opt/conda/condabin/conda install -p /opt/conda --file /opt/conda-libmamba-solver-src/dev/requirements.txt &&
                    /opt/conda/bin/python -m pip install /opt/conda-libmamba-solver-src --no-deps -vvv &&
                    source /opt/conda-src/dev/linux/bashrc.sh &&
