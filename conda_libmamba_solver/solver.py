@@ -301,8 +301,7 @@ class LibMambaSolver(Solver):
         if channel_name == UNKNOWN_CHANNEL:
             channel_name = "defaults"
         # only look for a newer conda in the channel conda is currently installed from
-        # conda_newer_str = f"{channel_name}::conda>{current_conda_prefix_rec.version}"
-        conda_newer_str = f"{channel_name}::conda>4.10"
+        conda_newer_str = f"{channel_name}::conda>{_conda_version}"
         conda_newer_spec = MatchSpec(conda_newer_str)
 
         # if target prefix is the same conda is running from
