@@ -92,14 +92,14 @@ def assert_libmamba_user_agent(stdout):
     We then parse the exception message, retrieve the base64 chunk in the URL, decode it and...
     ta-da! The user agent will be there!
     """
-    # The exception message is a single line that looks like this:
-    #  RuntimeError: Multi-download failed. Reason: Transfer finalized, status: 404
+    # The exception message is in a single line that looks like this:
+    #  Multi-download failed. Reason: Transfer finalized, status: 404
     #  [http://localhost:8000/headers/SG9zdDogb...yIEdNVAoK] 469 bytes
     # we want to decode the base64 encoded path, which will give a chunk of text,
     # and then find the user-agent line
-    error = "RuntimeError: Multi-download failed. Reason: Transfer finalized, status: 404"
+    error = "Multi-download failed. Reason: Transfer finalized, status: 404"
     for line in stdout.splitlines():
-        if line.strip().startswith(error):
+        if error in line:
             _, address_and_suffix = line.split("[")
             address, _ = address_and_suffix.split("]")
             b64_headers = address.split("/")[-1]

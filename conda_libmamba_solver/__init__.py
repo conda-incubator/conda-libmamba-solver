@@ -1,20 +1,18 @@
-"""
-We offer two implementations:
-
-- LibMambaSolverDraft was the first one, and it depends on the full mamba distribution. It's only kept
-  around for debugging purposes and will be eventually deprecated and removed.
-- LibMambaSolver is a refactor of the latter, and only depends on libmambapy (the wrapped C++ library).
-  This is the one we will eventually ship as final.
-"""
-
 __version__ = "22.6.0"
 
-from ._libmamba import LibMambaSolverDraft
+from warnings import warn as _warn
 from .solver import LibMambaSolver
 
 
-def get_solver_class(key=None):
-    return {
-        "libmamba-draft": LibMambaSolverDraft,
-        "libmamba": LibMambaSolver,
-    }[key]
+def get_solver_class(key="libmamba"):
+    if key == "libmamba":
+        return LibMambaSolver
+    if key == "libmamba-draft":
+        _warn(
+            "The 'libmamba-draft' solver has been deprecated. "
+            "The 'libmamba' solver will be used instead. "
+            "Please consider updating your code to remove this warning. "
+            "Using 'libmamba-draft' will result in an error in a future release.",
+        )
+        return LibMambaSolver
+    raise ValueError("Key must be 'libmamba'")

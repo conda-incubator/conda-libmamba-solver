@@ -11,7 +11,7 @@ from conda.testing.solver_helpers import SolverTests
 from conda.testing.integration import make_temp_env, run_command, Commands
 from conda.core.prefix_data import get_python_version_for_prefix
 
-from conda_libmamba_solver import LibMambaSolver, LibMambaSolverDraft
+from conda_libmamba_solver import LibMambaSolver
 
 
 class TestLibMambaSolver(SolverTests):
@@ -40,12 +40,6 @@ class TestLibMambaSolver(SolverTests):
                 "test_remove",
             ],
         }
-
-
-class TestLibMambaSolverDraft(TestLibMambaSolver):
-    @property
-    def solver_class(self):
-        return LibMambaSolverDraft
 
 
 def test_python_downgrade_reinstalls_noarch_packages():

@@ -27,9 +27,8 @@ def print_and_check_output(*args, **kwargs):
 
 
 @pytest.mark.xfail(reason="base protections not enabled anymore")
-@pytest.mark.parametrize("solver", ("libmamba", "libmamba-draft"))
-def test_protection_for_base_env(solver):
-    with pytest.raises(CondaEnvironmentError), fresh_context(CONDA_EXPERIMENTAL_SOLVER=solver):
+def test_protection_for_base_env():
+    with pytest.raises(CondaEnvironmentError), fresh_context(CONDA_EXPERIMENTAL_SOLVER="libmamba"):
         current_test = os.environ.pop("PYTEST_CURRENT_TEST", None)
         try:
             run_command(
@@ -37,53 +36,12 @@ def test_protection_for_base_env(solver):
                 context.root_prefix,
                 "--dry-run",
                 "scipy",
-                "--experimental-solver",
-                solver,
+                "--experimental-solver=libmamba",
                 no_capture=True,
             )
         finally:
             if current_test is not None:
                 os.environ["PYTEST_CURRENT_TEST"] = current_test
-
-
-def test_logging():
-    "Check we are indeed writing full logs to disk"
-    process = print_and_check_output(
-        [
-            sys.executable,
-            "-m",
-            "conda",
-            "create",
-            "-y",
-            "-p",
-            _get_temp_prefix_safe(),
-            "--dry-run",
-            "--experimental-solver=libmamba",
-            "xz",
-        ],
-    )
-    in_header = False
-    for line in process.stdout.splitlines():
-        line = line.strip()
-        if "You are using the EXPERIMENTAL libmamba solver integration" in line:
-            in_header = True
-        elif line.startswith("***"):
-            in_header = False
-        elif in_header and line.endswith(".log"):
-            logfile_path = line
-            break
-    else:
-        pytest.fail("Could not find logfile path in outout")
-
-    with open(logfile_path) as f:
-        log_contents = f.read()
-
-    print("contents of", logfile_path)
-    print(log_contents)
-
-    assert "conda.conda_libmamba_solver" in log_contents
-    assert "info     libmamba Parsing MatchSpec" in log_contents
-    assert "info     libmamba Adding job" in log_contents
 
 
 def test_cli_flag_in_help():
@@ -114,8 +72,9 @@ def test_cli_flag_in_help():
 
 def cli_flag_and_env_var_settings():
     env_no_var = os.environ.copy()
-    env_libmamba = os.environ.copy()
-    env_classic = os.environ.copy()
+    env_no_var.pop("CONDA_EXPERIMENTAL_SOLVER", None)
+    env_libmamba = env_no_var.copy()
+    env_classic = env_no_var.copy()
     env_libmamba["CONDA_EXPERIMENTAL_SOLVER"] = "libmamba"
     env_classic["CONDA_EXPERIMENTAL_SOLVER"] = "classic"
     command = [

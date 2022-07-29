@@ -161,7 +161,7 @@ def load_channels(
     return index
 
 
-def init_api_context(verbosity: int = context.verbosity, use_mamba_experimental: bool = False):
+def init_api_context(use_mamba_experimental: bool = False):
     api_ctx = api.Context()
 
     api_ctx.json = context.json
@@ -173,10 +173,8 @@ def init_api_context(verbosity: int = context.verbosity, use_mamba_experimental:
         if use_mamba_experimental:
             context.json = False
 
-    # we want verbosity by default, we'll control stdout in our logging
-    # but the file logs will be DEBUG
-    api_ctx.verbosity = verbosity
-    api_ctx.set_verbosity(verbosity)
+    api_ctx.verbosity = context.verbosity
+    api_ctx.set_verbosity(context.verbosity)
     api_ctx.quiet = context.quiet
     api_ctx.offline = context.offline
     api_ctx.local_repodata_ttl = context.local_repodata_ttl
@@ -278,65 +276,3 @@ def to_package_record_from_subjson(entry, pkg, jsn_string):
     info["url"] = join_url(channel_url, pkg)
     package_record = PackageRecord(**info)
     return package_record
-
-
-# TODO: This one can be deleted once merged
-
-
-def get_installed_packages(prefix, show_channel_urls=None):
-    result = {"packages": {}}
-
-    # Currently, we need to have pip interop disabled :/
-    installed = {rec: rec for rec in PrefixData(prefix, pip_interop_enabled=False).iter_records()}
-
-    # add virtual packages as installed packages
-    # they are packages installed on the system that conda can do nothing
-    # about (e.g. glibc)
-    # if another version is needed, installation just fails
-    # they don't exist anywhere (they start with __)
-    _supplement_index_with_system(installed)
-    installed = list(installed)
-
-    for prec in installed:
-        json_rec = prec.dist_fields_dump()
-        json_rec["depends"] = prec.depends
-        json_rec["constrains"] = prec.constrains
-        json_rec["build"] = prec.build
-        result["packages"][prec.fn] = json_rec
-
-    return installed, result
-
-
-# TODO: This one can be deleted once merged
-
-installed_pkg_recs = None
-
-# TODO: This one can be deleted once merged
-
-
-def get_installed_jsonfile(prefix):
-    global installed_pkg_recs
-    installed_pkg_recs, output = get_installed_packages(prefix, show_channel_urls=True)
-    installed_json_f = tempfile.NamedTemporaryFile("w", delete=False)
-    installed_json_f.write(json_dump(output))
-    installed_json_f.flush()
-    return installed_json_f, installed_pkg_recs
-
-
-### repoquery API ###
-def repoquery_search(query, pool, fmt=api.QueryFormat.JSON):
-    q = api.Query(pool)
-    res = q.find(query, fmt)
-    return json.loads(res)
-
-
-def repoquery_depends(query, pool, fmt=api.QueryFormat.JSON):
-    q = api.Query(pool)
-    res = q.depends(query, fmt)
-    return json.loads(res)
-
-
-def repoquery_whoneeds(query, pool, fmt=api.QueryFormat.JSON):
-    q = api.Query(pool)
-    res = q.whoneeds(query, fmt)
-    return json.loads(res)
