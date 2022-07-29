@@ -49,7 +49,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - name: Define test type and override pytest settings
@@ -75,7 +75,7 @@ jobs:
           -e TEST_SPLITS
           -e TEST_GROUP
           -e CONDA_EXPERIMENTAL_SOLVER
-          ghcr.io/conda/conda-ci:master-linux-python${{ matrix.python-version }}
+          ghcr.io/conda/conda-ci:main-linux-python${{ matrix.python-version }}
           bash -c "sudo env CONDA_EXPERIMENTAL_SOLVER=classic \
                         /opt/conda/condabin/conda install -p /opt/conda \
                         --file /opt/conda-libmamba-solver-src/dev/requirements.txt &&
@@ -116,7 +116,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - uses: conda-incubator/setup-miniconda@v2
@@ -127,25 +127,18 @@ jobs:
           use-only-tar-bz2: true # IMPORTANT: This needs to be set for caching to work properly!
 
       - name: Setup environment
-        shell: bash -l {0}
+        shell: bash -el {0}
         working-directory: conda
         env:
           # with 4.12 out, ensure classic is used to install conda-libmamba-solver deps
           # otherwise it will error out because it can't be imported yet!
           CONDA_EXPERIMENTAL_SOLVER: classic
         run: |
-          set -euxo pipefail
-          # restoring the default for changeps1 to have parity with dev
-          conda config --set changeps1 true
-          # make sure the caching works correctly
-          conda config --set use_only_tar_bz2 true
-          # install all test requirements
+          ./dev/macos/setup.sh
           conda install --yes \
-            --file tests/requirements.txt \
             --file ../conda-libmamba-solver/dev/requirements.txt \
             python=${{ matrix.python-version }}
-          conda update openssl ca-certificates certifi
-          conda info
+          conda info -a
           python -c "from importlib_metadata import version; print('libmambapy', version('libmambapy'))"
 
       - name: Install conda-libmamba-solver
@@ -210,7 +203,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: conda/conda
-          ref: master
+          ref: main
           path: conda
 
       - name: Set temp dirs correctly

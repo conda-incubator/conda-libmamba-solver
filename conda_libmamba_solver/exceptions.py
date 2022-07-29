@@ -1,4 +1,4 @@
-from conda.exceptions import UnsatisfiableError
+from conda.exceptions import UnsatisfiableError, ChannelError
 
 
 class LibMambaUnsatisfiableError(UnsatisfiableError):
@@ -8,3 +8,7 @@ class LibMambaUnsatisfiableError(UnsatisfiableError):
 
     def __init__(self, message, **kwargs):
         super(UnsatisfiableError, self).__init__(str(message))
+
+
+class LibMambaChannelError(ChannelError):
+    "Report channels not compatible with libmamba loaders"

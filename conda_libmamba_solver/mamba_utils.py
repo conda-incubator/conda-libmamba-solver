@@ -78,15 +78,89 @@ def get_index(
         for channel_platform, url in channel.platform_urls(with_credentials=True):
             full_url = CondaHttpAuth.add_binstar_token(url)
 
-            sd = api.SubdirData(channel, channel_platform, full_url, pkgs_dirs, repodata_fn)
+            subdir_data = api.SubdirData(
+                channel, channel_platform, full_url, pkgs_dirs, repodata_fn
+            )
 
-            index.append((sd, {"platform": channel_platform, "url": url, "channel": channel}))
-            dlist.add(sd)
+            index.append(
+                (
+                    subdir_data,
+                    {
+                        "platform": channel_platform,
+                        "url": url,
+                        "channel": channel,
+                        "loaded_with": "libmambapy.SubdirData",
+                    },
+                )
+            )
+            dlist.add(subdir_data)
 
     is_downloaded = dlist.download(api.MAMBA_DOWNLOAD_FAILFAST)
 
     if not is_downloaded:
         raise RuntimeError("Error downloading repodata.")
+
+    return index
+
+
+def set_channel_priorities(pool, index, repos, has_priority=None):
+    """
+    This function was part of load_channels originally. We just split it to reuse it a bit better.
+    We also added some logic to handle an index made of subdirdatas and/or repos already
+    (check `subdir_or_repo` object).
+    """
+    if has_priority is None:
+        has_priority = context.channel_priority in [
+            ChannelPriority.STRICT,
+            ChannelPriority.FLEXIBLE,
+        ]
+
+    subprio_index = len(index)
+    if has_priority:
+        # first, count unique channels
+        n_channels = len(set([entry["channel"].canonical_name for _, entry in index]))
+        current_channel = index[0][1]["channel"].canonical_name
+        channel_prio = n_channels
+
+    for subdir_or_repo, entry in index:
+        # add priority here
+        if has_priority:
+            if entry["channel"].canonical_name != current_channel:
+                channel_prio -= 1
+                current_channel = entry["channel"].canonical_name
+            priority = channel_prio
+        else:
+            priority = 0
+        if has_priority:
+            # NOTE: -- this is the whole reason we are vendoring this file --
+            # We are patching this from 0 to 1, starting with mamba 0.19
+            # Otherwise, test_create::test_force_remove fails :shrug:
+            subpriority = 1
+        else:
+            subpriority = subprio_index
+            subprio_index -= 1
+
+        if isinstance(subdir_or_repo, api.SubdirData):
+            if not subdir_or_repo.loaded() and entry["platform"] != "noarch":
+                # ignore non-loaded subdir if channel is != noarch
+                continue
+
+        if context.verbosity != 0 and not context.json:
+            print(
+                "Channel: {}, platform: {}, prio: {} : {}".format(
+                    entry["channel"], entry["platform"], priority, subpriority
+                )
+            )
+            if isinstance(subdir_or_repo, api.SubdirData):
+                print("Cache path: ", subdir_or_repo.cache_path())
+
+        if isinstance(subdir_or_repo, api.SubdirData):
+            repo = subdir_or_repo.create_repo(pool)
+        else:
+            repo = subdir_or_repo
+
+        repo.set_priority(priority, subpriority)
+        repos.append(repo)
 
     return index
 
@@ -110,55 +184,7 @@ def load_channels(
         repodata_fn=repodata_fn,
         use_cache=use_cache,
     )
-
-    if has_priority is None:
-        has_priority = context.channel_priority in [
-            ChannelPriority.STRICT,
-            ChannelPriority.FLEXIBLE,
-        ]
-
-    subprio_index = len(index)
-    if has_priority:
-        # first, count unique channels
-        n_channels = len(set([entry["channel"].canonical_name for _, entry in index]))
-        current_channel = index[0][1]["channel"].canonical_name
-        channel_prio = n_channels
-
-    for subdir, entry in index:
-        # add priority here
-        if has_priority:
-            if entry["channel"].canonical_name != current_channel:
-                channel_prio -= 1
-                current_channel = entry["channel"].canonical_name
-            priority = channel_prio
-        else:
-            priority = 0
-        if has_priority:
-            # NOTE: -- this is the whole reason we are vendoring this file --
-            # We are patching this from 0 to 1, starting with mamba 0.19
-            # Otherwise, test_create::test_force_remove fails :shrug:
-            subpriority = 1
-        else:
-            subpriority = subprio_index
-            subprio_index -= 1
-
-        if not subdir.loaded() and entry["platform"] != "noarch":
-            # ignore non-loaded subdir if channel is != noarch
-            continue
-
-        if context.verbosity != 0 and not context.json:
-            print(
-                "Channel: {}, platform: {}, prio: {} : {}".format(
-                    entry["channel"], entry["platform"], priority, subpriority
-                )
-            )
-            print("Cache path: ", subdir.cache_path())
-
-        repo = subdir.create_repo(pool)
-        repo.set_priority(priority, subpriority)
-        repos.append(repo)
-
-    return index
+    return set_channel_priorities(pool, index, repos, has_priority)
 
 
 def init_api_context(use_mamba_experimental: bool = False):

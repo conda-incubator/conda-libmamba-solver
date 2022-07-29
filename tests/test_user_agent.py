@@ -48,15 +48,14 @@ import json
 import sys
 from subprocess import run, check_output, PIPE
 from importlib_metadata import version
-from tempfile import TemporaryDirectory
 
 import pytest
 
 
 from .channel_testing_utils import (
     create_with_channel,
-    server_auth_none_debug_repodata,
-    server_auth_none_debug_packages,
+    http_server_auth_none_debug_repodata,
+    http_server_auth_none_debug_packages,
 )
 
 
@@ -93,7 +92,7 @@ def assert_libmamba_user_agent(stdout):
     ta-da! The user agent will be there!
     """
     # The exception message is in a single line that looks like this:
-    #  Multi-download failed. Reason: Transfer finalized, status: 404
+    #  Multi-download failed. Reason: Transfer finalized, status: 404
     #  [http://localhost:8000/headers/SG9zdDogb...yIEdNVAoK] 469 bytes
     # we want to decode the base64 encoded path, which will give a chunk of text,
     # and then find the user-agent line
@@ -170,9 +169,9 @@ def assert_requests_user_agent(stdout, solver, request_type="repodata"):
         raise AssertionError("Couldn't find the User-Agent info in headers!")
 
 
-def test_user_agent_libmamba_repodata(server_auth_none_debug_repodata):
+def test_user_agent_libmamba_repodata(http_server_auth_none_debug_repodata):
     process = create_with_channel(
-        server_auth_none_debug_repodata,
+        http_server_auth_none_debug_repodata,
         solver="libmamba",
         check=False,
         stdout=PIPE,
@@ -182,12 +181,12 @@ def test_user_agent_libmamba_repodata(server_auth_none_debug_repodata):
     assert_libmamba_user_agent(process.stdout)
 
 
-def test_user_agent_libmamba_packages(server_auth_none_debug_packages, tmp_path):
+def test_user_agent_libmamba_packages(http_server_auth_none_debug_packages, tmp_path):
     run([sys.executable, "-m", "conda", "clean", "--tarballs", "--packages", "--yes"])
     env = os.environ.copy()
     env["CONDA_PKGS_DIRS"] = str(tmp_path)
     process = create_with_channel(
-        server_auth_none_debug_packages,
+        http_server_auth_none_debug_packages,
         solver="libmamba",
         check=False,
         stdout=PIPE,
@@ -202,9 +201,9 @@ def test_user_agent_libmamba_packages(server_auth_none_debug_packages, tmp_path)
     assert_requests_user_agent(process.stdout, solver="libmamba", request_type="packages")
 
 
-def test_user_agent_classic_repodata(server_auth_none_debug_repodata):
+def test_user_agent_classic_repodata(http_server_auth_none_debug_repodata):
     process = create_with_channel(
-        server_auth_none_debug_repodata,
+        http_server_auth_none_debug_repodata,
         solver="classic",
         check=False,
         stdout=PIPE,
@@ -214,13 +213,13 @@ def test_user_agent_classic_repodata(server_auth_none_debug_repodata):
     assert_requests_user_agent(process.stdout, solver="classic")
 
 
-def test_user_agent_classic_packages(server_auth_none_debug_packages, tmp_path):
+def test_user_agent_classic_packages(http_server_auth_none_debug_packages, tmp_path):
     run([sys.executable, "-m", "conda", "clean", "--tarballs", "--packages", "--yes"])
 
     env = os.environ.copy()
     env["CONDA_PKGS_DIRS"] = str(tmp_path)
     process = create_with_channel(
-        server_auth_none_debug_packages,
+        http_server_auth_none_debug_packages,
         solver="classic",
         check=False,
         stdout=PIPE,

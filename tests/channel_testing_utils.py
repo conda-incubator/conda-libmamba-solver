@@ -1,22 +1,23 @@
 import pathlib
 import os
 import socket
-import subprocess
 import sys
+import subprocess
+from typing import Tuple
 
 import pytest
 from xprocess import ProcessStarter
 
-from conda.testing.integration import _get_temp_prefix
+from conda.testing.integration import _get_temp_prefix, run_command
 
 
-def _mock_server(xprocess, name, port, auth="none", user=None, password=None, token=None):
+def _mock_http_server(xprocess, name, port, auth="none", user=None, password=None, token=None):
     """
     Adapted from
     https://github.com/mamba-org/powerloader/blob/effe2b7e1/test/helpers.py#L11
     """
     curdir = pathlib.Path(__file__).parent
-    print("Starting mock_server")
+    print("Starting mock_http_server")
 
     class Starter(ProcessStarter):
 
@@ -69,36 +70,47 @@ def _mock_server(xprocess, name, port, auth="none", user=None, password=None, to
 
 
 @pytest.fixture
-def server_auth_none(xprocess):
-    yield from _mock_server(xprocess, name="server_auth_none", port=8000, auth="none")
+def http_server_auth_none(xprocess):
+    yield from _mock_http_server(xprocess, name="http_server_auth_none", port=8000, auth="none")
 
 
 @pytest.fixture
-def server_auth_none_debug_repodata(xprocess):
-    yield from _mock_server(
-        xprocess, name="server_auth_none_debug_repodata", port=8000, auth="none-debug-repodata"
-    )
-
-
-@pytest.fixture
-def server_auth_none_debug_packages(xprocess):
-    yield from _mock_server(
-        xprocess, name="server_auth_none_debug_packages", port=8000, auth="none-debug-packages"
-    )
-
-
-@pytest.fixture
-def server_auth_basic(xprocess):
-    yield from _mock_server(
-        xprocess, name="server_auth_basic", port=8000, auth="basic", user="user", password="test"
-    )
-
-
-@pytest.fixture
-def server_auth_basic_email(xprocess):
-    yield from _mock_server(
+def http_server_auth_none_debug_repodata(xprocess):
+    yield from _mock_http_server(
         xprocess,
-        name="server_auth_basic_email",
+        name="http_server_auth_none_debug_repodata",
+        port=8000,
+        auth="none-debug-repodata",
+    )
+
+
+@pytest.fixture
+def http_server_auth_none_debug_packages(xprocess):
+    yield from _mock_http_server(
+        xprocess,
+        name="http_server_auth_none_debug_packages",
+        port=8000,
+        auth="none-debug-packages",
+    )
+
+
+@pytest.fixture
+def http_server_auth_basic(xprocess):
+    yield from _mock_http_server(
+        xprocess,
+        name="http_server_auth_basic",
+        port=8000,
+        auth="basic",
+        user="user",
+        password="test",
+    )
+
+
+@pytest.fixture
+def http_server_auth_basic_email(xprocess):
+    yield from _mock_http_server(
+        xprocess,
+        name="http_server_auth_basic_email",
         port=8000,
         auth="basic",
         user="user@email.com",
@@ -107,17 +119,19 @@ def server_auth_basic_email(xprocess):
 
 
 @pytest.fixture
-def server_auth_token(xprocess):
-    yield from _mock_server(
+def http_server_auth_token(xprocess):
+    yield from _mock_http_server(
         xprocess,
-        name="server_auth_token",
+        name="http_server_auth_token",
         port=8000,
         auth="token",
         token="xy-12345678-1234-1234-1234-123456789012",
     )
 
 
-def create_with_channel(channel, solver="libmamba", check=True, **kwargs):
+def create_with_channel(
+    channel, solver="libmamba", check=True, **kwargs
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         [
             sys.executable,
@@ -137,3 +151,19 @@ def create_with_channel(channel, solver="libmamba", check=True, **kwargs):
         check=check,
         **kwargs,
     )
+
+
+def create_with_channel_in_process(channel, solver="libmamba", **kwargs) -> Tuple[str, str, int]:
+    stdout, stderr, returncode = run_command(
+        "create",
+        _get_temp_prefix(),
+        f"--experimental-solver={solver}",
+        "--json",
+        "--override-channels",
+        "--download-only",
+        "-c",
+        channel,
+        "test-package",
+        **kwargs,
+    )
+    return stdout, stderr, returncode
